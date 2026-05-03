@@ -34,27 +34,6 @@ Ambas implementaciones reconocen el mismo conjunto base de tokens:
 
 ---
 
-## Salida (ambos analizadores)
-
-Los dos producen la misma estructura de salida en `stdout`:
-
-```
-=== TOKEN TABLE ===
-ID    Nombre          Lexema        Linea
----   ----------      ----------    -----
-100   KEYWORD         if            3
-200   IDENTIFIER      x             3
-201   INTEGER         42            4
-...
-
-=== SYMBOL TABLE ===
-(identificadores y literales numéricos encontrados)
-```
-
-Los errores léxicos se reportan en `stderr` con número de línea.
-
----
-
 ## Implementación en C# — AFD Manual
 
 **Ubicación:** `analizador_C#/`
@@ -63,7 +42,7 @@ Los errores léxicos se reportan en `stderr` con número de línea.
 
 Implementa el reconocimiento mediante **Autómatas Finitos Deterministas (AFD)** codificados a mano. Cada tipo de token tiene su propio autómata independiente. El componente `Lexer` los coordina: lee carácter a carácter y decide qué autómata ejecutar según el símbolo actual.
 
-Después de reconocer cada token, lo **valida cruzadamente** con su expresión regular equivalente (solo para verificación, no para tokenizar).
+Después de reconocer cada token, lo valida cruzadamente con su expresión regular equivalente (solo para verificación, no para tokenizar).
 
 ### Arquitectura
 
@@ -90,24 +69,17 @@ Cada autómata implementa:
 - Función de transición δ(q, c) → q'
 - Principio de **máximo consumo** (maximal munch): siempre captura el lexema más largo posible
 
-### Tokens adicionales (solo C#)
-
-| Token | Patrón |
-|---|---|
-| `STRING` | `"[^"\n]*"` — cadenas entre comillas dobles |
-| `KEYWORD` | subconjunto de IDENTIFIER: `if else while for int float string return void class` |
-| `WHITESPACE` | espacios, tabs y saltos de línea (consumidos y descartados) |
-| `UNKNOWN` | cualquier símbolo no reconocido |
-
-### Compilación y ejecución
+### Cómo correrlo
 
 Requisitos: [.NET 8 SDK](https://dotnet.microsoft.com/download)
 
 ```bash
-cd analizador_C#/LexerProject
+cd analizador_C#/Analizador_C#/LexerProject
 dotnet build
 dotnet run --project LexerProject
 ```
+
+Al arrancar muestra un menú. Elegir la opción `2` para ingresar texto propio, o la opción `1` para correr el ejemplo predefinido.
 
 Para correr las pruebas unitarias:
 
@@ -115,25 +87,36 @@ Para correr las pruebas unitarias:
 dotnet test
 ```
 
-### Ejemplo de salida
+### Prueba con `int precio = 3.14; if (precio >= 0.0) // ok`
 
-Entrada: `int x = 3.14; // valor`
+Seleccionar opción `2`, pegar la línea y dejar una línea vacía para terminar.
+
+Salida:
 
 ```
-Pos   Token         Lexema        Linea  Col
-0     KEYWORD       int           1      1
-4     IDENTIFIER    x             1      5
-6     REL_OP        =             1      7
-8     REAL          3.14          1      9
-12    UNKNOWN       ;             1      13
-14    LINE_COMMENT  // valor      1      15
+Pos   Token            Lexema       Linea  Col
+----------------------------------------------------
+0     KEYWORD          "int"        1      1
+4     IDENTIFIER       "precio"     1      5
+11    REL_OP           "="          1      12
+13    REAL             "3.14"       1      14
+17    UNKNOWN          ";"          1      18    <-- ERROR LEXICO
+19    KEYWORD          "if"         1      20
+22    UNKNOWN          "("          1      23    <-- ERROR LEXICO
+23    IDENTIFIER       "precio"     1      24
+30    REL_OP           ">="         1      31
+33    REAL             "0.0"        1      34
+36    UNKNOWN          ")"          1      37    <-- ERROR LEXICO
+38    LINE_COMMENT     "// ok"      1      39
 ```
+
+> Los tokens marcados como `UNKNOWN` son errores léxicos esperados: este analizador no tiene definidos `;`, `(` ni `)` dentro de su conjunto de tokens.
 
 ---
 
 ## Implementación en C — flex + C99
 
-**Ubicación:** `analizador_C/lenguaje_simple/`
+**Ubicación:** `analizador_C#/Analizador_C/lenguaje_simple/`
 
 ### ¿Cómo funciona?
 
@@ -167,20 +150,54 @@ symbol_table.c ────────────────┤── gcc ─
 main.c ────────────────────────┘
 ```
 
-### Compilación y ejecución
+### Cómo correrlo
 
-Requisitos: `flex` y `gcc`
+Requisitos: `flex` y `gcc`. En Windows se necesita **WSL** o una terminal Linux.
 
 ```bash
-cd analizador_C/lenguaje_simple/src
+cd analizador_C#/Analizador_C/lenguaje_simple/src
 make
 ```
 
-Para ejecutar:
+Para ejecutar con un archivo de prueba:
 
 ```bash
 ./scanner ../examples/test_valid.sl      # programa de prueba válido
 ./scanner ../examples/test_errors.sl     # programa con errores léxicos
+```
+
+### Prueba con `int precio = 3.14; if (precio >= 0.0) // ok`
+
+Crear un archivo con el contenido de la prueba y pasárselo al scanner:
+
+```bash
+echo "int precio = 3.14; if (precio >= 0.0) // ok" > prueba.sl
+./scanner prueba.sl
+```
+
+Salida esperada:
+
+```
+=== TOKEN TABLE ===
+ID    Nombre          Lexema        Linea
+---   ----------      ----------    -----
+100   KEYWORD         int           1
+200   IDENTIFIER      precio        1
+320   ASSIGN_OP       =             1
+202   FLOAT_LIT       3.14          1
+400   SEMICOLON       ;             1
+100   KEYWORD         if            1
+401   LPAREN          (             1
+200   IDENTIFIER      precio        1
+312   GEQ             >=            1
+202   FLOAT_LIT       0.0           1
+402   RPAREN          )             1
+500   COMMENT         // ok         1
+
+=== SYMBOL TABLE ===
+[0] precio  (ID)
+[1] 3.14    (FLOAT_LIT)
+[2] 0.0     (FLOAT_LIT)
 ```
 
 ---
@@ -189,15 +206,18 @@ Para ejecutar:
 
 ```
 compilador/
-├── analizador_C#/              ← implementación con AFD en C# (.NET 8)
-│   ├── LexerProject/
-│   │   ├── LexerProject/       ← código fuente principal
-│   │   └── LexerProject.Tests/ ← pruebas unitarias
-│   └── README.md
+├── analizador_C#/                  ← repo git principal
+│   ├── Analizador_C#/              ← implementación C# con AFD manual (.NET 8)
+│   │   └── LexerProject/
+│   │       ├── LexerProject/       ← código fuente
+│   │       └── LexerProject.Tests/ ← pruebas unitarias
+│   ├── Analizador_C/               ← implementación C con flex + C99
+│   │   └── lenguaje_simple/
+│   │       ├── src/                ← scanner.l, main.c, symbol_table
+│   │       ├── examples/           ← archivos .sl de prueba
+│   │       └── docs/
+│   └── recursos/                   ← material de referencia del curso
 │
-└── analizador_C/               ← implementación con flex en C99
+└── analizador_C/                   ← copia local del analizador C
     └── lenguaje_simple/
-        ├── src/                ← scanner.l, main.c, symbol_table
-        ├── examples/           ← archivos .sl de prueba
-        └── docs/               ← especificación léxica y trazabilidad
 ```
