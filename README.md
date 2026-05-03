@@ -225,11 +225,24 @@ Ejemplo:
 
 ---
 
-## 10. Ejecución
+## 10. Compilación y ejecución
+
+Requisitos: .NET 8 SDK instalado.
 
 ```bash
+cd LexerProject
 dotnet build
-dotnet run
-11. Conclusión
+dotnet run --project LexerProject
+```
+
+Para ejecutar las pruebas unitarias:
+
+```bash
+dotnet test
+```
+
+---
+
+## 11. Conclusión
 
 El sistema demuestra la aplicación práctica de la teoría de lenguajes formales en la construcción de analizadores léxicos. La implementación mediante AFD permite un reconocimiento eficiente, determinista y completamente trazable, alineado con los principios clásicos del diseño de compiladores.

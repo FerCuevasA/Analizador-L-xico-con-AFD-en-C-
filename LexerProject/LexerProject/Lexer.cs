@@ -38,7 +38,8 @@ public class Lexer
         new WhitespaceAutomata(),
     ];
 
-    public Lexer(string source) => _source = source;
+    // Normaliza \r\n y \r sueltos a \n para evitar que \r quede dentro de lexemas
+    public Lexer(string source) => _source = source.Replace("\r\n", "\n").Replace("\r", "\n");
 
     public (List<Token> tokens, List<ValidationResult> validations) Tokenize()
     {
