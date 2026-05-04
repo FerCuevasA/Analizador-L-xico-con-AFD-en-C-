@@ -4,10 +4,11 @@
 # Requisitos: flex, gcc
 #
 # Targets:
-#   make          → compila todo
-#   make test     → ejecuta con el ejemplo válido
-#   make test_err → ejecuta con el ejemplo de errores
-#   make clean    → elimina archivos generados
+#   make           → compila todo
+#   make test      → ejecuta con el ejemplo válido
+#   make test_err  → ejecuta con el ejemplo de errores
+#   make test_all  → suite completa de pruebas automatizadas (run_tests.sh)
+#   make clean     → elimina archivos generados
 # ===========================================================================
 
 CC      = gcc
@@ -30,7 +31,10 @@ test: $(TARGET)
 test_err: $(TARGET)
 	./$(TARGET) ../examples/test_errors.sl
 
+test_all: $(TARGET)
+	cd ../tests && bash run_tests.sh
+
 clean:
 	rm -f $(LEXOUT) $(TARGET)
 
-.PHONY: all test test_err clean
+.PHONY: all test test_err test_all clean
