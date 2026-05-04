@@ -23,7 +23,7 @@ $(LEXOUT): scanner.l
 	$(LEX) scanner.l
 
 $(TARGET): $(LEXOUT) symbol_table.c main.c symbol_table.h token_ids.h
-	$(CC) $(CFLAGS) $(LEXOUT) symbol_table.c main.c -o $(TARGET) -lfl
+	$(CC) $(CFLAGS) $(LEXOUT) symbol_table.c main.c -o $(TARGET)
 
 test: $(TARGET)
 	./$(TARGET) ../examples/test_valid.sl

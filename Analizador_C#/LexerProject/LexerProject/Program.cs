@@ -1,12 +1,10 @@
 using LexerProject;
 
-// ── Tablas de transicion al arrancar ─────────────────────────────────────────
 AutomataDisplay.ShowAllTables();
 
-// ── Menu principal ────────────────────────────────────────────────────────────
 Console.WriteLine();
 Console.WriteLine("╔══════════════════════════════════════╗");
-Console.WriteLine("║   ANALIZADOR LEXICO AFD - .NET 8     ║");
+Console.WriteLine("║   ANALIZADOR LEXICO AFD - .NET 10    ║");
 Console.WriteLine("╚══════════════════════════════════════╝");
 Console.WriteLine("  1. Analizar texto de ejemplo");
 Console.WriteLine("  2. Ingresar texto personalizado");
@@ -31,11 +29,10 @@ switch (Console.ReadLine()?.Trim())
         break;
     default:
         Console.WriteLine("Opcion no valida. Ejecutando ejemplo por defecto...");
-        RunAnalysis("int precio = 3.14; // descuento\nif (precio >= 10) { return precio; }");
+        RunAnalysis("int precio = 3.14; if (precio >= 0.0) // ok");
         break;
 }
 
-// ── Funcion de analisis y reporte ─────────────────────────────────────────────
 static void RunAnalysis(string source)
 {
     Console.WriteLine();
@@ -45,17 +42,30 @@ static void RunAnalysis(string source)
     var lexer = new Lexer(source);
     var (tokens, validations) = lexer.Tokenize();
 
-    // Tabla de tokens
-    Console.WriteLine($"{"Pos",-5} {"Token",-16} {"Lexema",-22} {"Linea",-7} {"Col",-5}");
-    Console.WriteLine(new string('-', 60));
+    // ── Tabla de tokens ──────────────────────────────────────────────────────
+    string hdr = $"{"ID",-6} {"Token",-16} {"Lexema",-25} {"Linea",-7} {"Col",-5}";
+    Console.WriteLine(new string('=', hdr.Length));
+    Console.WriteLine(hdr);
+    Console.WriteLine(new string('-', hdr.Length));
     foreach (var t in tokens)
     {
         string error = t.Type == TokenType.UNKNOWN ? "  <-- ERROR LEXICO" : "";
-        string lexDisplay = "\"" + t.Lexeme + "\"";
-        Console.WriteLine($"{t.Pos,-5} {t.Type,-16} {lexDisplay,-22} {t.Line,-7} {t.Col,-5}{error}");
+        string idStr  = t.Type != TokenType.UNKNOWN ? t.Id.ToString() : "?";
+        Console.WriteLine($"{idStr,-6} {t.Type,-16} {("\"" + t.Lexeme + "\""  ),-25} {t.Line,-7} {t.Col,-5}{error}");
     }
+    Console.WriteLine(new string('=', hdr.Length));
 
-    // Validacion cruzada con Regex
+    // ── Tabla de simbolos ────────────────────────────────────────────────────
+    Console.WriteLine();
+    Console.WriteLine(new string('=', 55));
+    Console.WriteLine($"{"Indx",-6} {"Lexema",-25} {"Tipo",-10} {"Linea"}");
+    Console.WriteLine(new string('-', 55));
+    foreach (var e in lexer.SymbolTable.Entries)
+        Console.WriteLine($"{e.Index,-6} {e.Lexeme,-25} {e.Kind,-10} {e.Line}");
+    Console.WriteLine(new string('=', 55));
+    Console.WriteLine($"  Total de entradas: {lexer.SymbolTable.Entries.Count}");
+
+    // ── Validacion cruzada con Regex ─────────────────────────────────────────
     Console.WriteLine();
     Console.WriteLine("=== VALIDACION CRUZADA CON REGEX ===");
     foreach (var v in validations)

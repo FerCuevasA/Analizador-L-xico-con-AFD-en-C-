@@ -8,6 +8,10 @@ public static class AutomataDisplay
         ShowIntegerTable();
         ShowRealTable();
         ShowRelOpTable();
+        ShowCompoundAssignTable();
+        ShowAssignTable();
+        ShowArithOpTable();
+        ShowSpecialSymTable();
         ShowStringTable();
         ShowLineCommentTable();
     }
@@ -66,22 +70,100 @@ public static class AutomataDisplay
     {
         Console.WriteLine("""
             +------------------------------------------------------------------------+
-            |       AFD OPERADORES RELACIONALES - Tabla de transiciones              |
+            |    AFD OPERADORES RELACIONALES - Tabla de transiciones                 |
+            |    Reconoce: <  <=  >  >=  ==  !=   (= simple → AssignAutomata)       |
             +--------+--------+--------+--------+--------+--------+----------------+
             | Estado |   <    |   >    |   =    |   !    |  otro  |    Accion      |
             +--------+--------+--------+--------+--------+--------+----------------+
-            | q0  >  | ->q1*  | ->q3*  | ->q5*  |  ->q7  | ERROR  |    inicio      |
+            | q0  >  | ->q1*  | ->q3*  |  ->q5  |  ->q7  | ERROR  |    inicio      |
             | [q1 *] |  EMIT  |  EMIT  | ->q2*  |  EMIT  |  EMIT  | vio  <         |
             | [q2 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  | vio <=         |
             | [q3 *] |  EMIT  |  EMIT  | ->q4*  |  EMIT  |  EMIT  | vio  >         |
             | [q4 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  | vio >=         |
-            | [q5 *] |  EMIT  |  EMIT  | ->q6*  |  EMIT  |  EMIT  | vio  =         |
+            |   q5   | ERROR  | ERROR  | ->q6*  | ERROR  | ERROR  | vio = (espera ==)|
             | [q6 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  | vio ==         |
             |   q7   | ERROR  | ERROR  | ->q8*  | ERROR  | ERROR  | vio  !         |
             | [q8 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  | vio !=         |
             +--------+--------+--------+--------+--------+--------+----------------+
             |  >  = estado inicial     * = estado de aceptacion                     |
             +------------------------------------------------------------------------+
+            """);
+    }
+
+    public static void ShowCompoundAssignTable()
+    {
+        Console.WriteLine("""
+            +-------------------------------------------------------------------+
+            |    AFD ASIGNACION COMPUESTA - Tabla de transiciones               |
+            |    Reconoce: +=  -=  *=  /=                                       |
+            +--------+--------+--------+--------+--------+---------------------+
+            | Estado |   +    |   -    |   *    |   /    |    =   |  Accion    |
+            +--------+--------+--------+--------+--------+---------------------+
+            | q0  >  | ->q1   | ->q3   | ->q5   | ->q7   | ERROR  |  inicio    |
+            |   q1   | ERROR  | ERROR  | ERROR  | ERROR  | ->q2*  |  vio +     |
+            | [q2 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  vio +=    |
+            |   q3   | ERROR  | ERROR  | ERROR  | ERROR  | ->q4*  |  vio -     |
+            | [q4 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  vio -=    |
+            |   q5   | ERROR  | ERROR  | ERROR  | ERROR  | ->q6*  |  vio *     |
+            | [q6 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  vio *=    |
+            |   q7   | ERROR  | ERROR  | ERROR  | ERROR  | ->q8*  |  vio /     |
+            | [q8 *] |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  EMIT  |  vio /=    |
+            +--------+--------+--------+--------+--------+---------------------+
+            |  >  = estado inicial     * = estado de aceptacion                 |
+            +-------------------------------------------------------------------+
+            """);
+    }
+
+    public static void ShowAssignTable()
+    {
+        Console.WriteLine("""
+            +------------------------------------------------------------+
+            |    AFD ASIGNACION SIMPLE - Tabla de transiciones           |
+            |    Reconoce: =                                             |
+            +--------+------------+-------------+------------------------+
+            | Estado |     =      |    otro     |        Accion         |
+            +--------+------------+-------------+------------------------+
+            | q0  >  |   -> q1    |    ERROR    |        inicio         |
+            | [q1 *] |    EMIT    |    EMIT     |       vio =           |
+            +--------+------------+-------------+------------------------+
+            |  >  = estado inicial     * = estado de aceptacion          |
+            +------------------------------------------------------------+
+            """);
+    }
+
+    public static void ShowArithOpTable()
+    {
+        Console.WriteLine("""
+            +------------------------------------------------------------+
+            |    AFD OPERADORES ARITMETICOS - Tabla de transiciones      |
+            |    Reconoce: +  -  *  /                                    |
+            +--------+------+------+------+------+----------------------+
+            | Estado |  +   |  -   |  *   |  /   |       Accion        |
+            +--------+------+------+------+------+----------------------+
+            | q0  >  | ->q1*| ->q2*| ->q3*| ->q4*|       inicio        |
+            | [q1 *] | EMIT | EMIT | EMIT | EMIT |       vio +         |
+            | [q2 *] | EMIT | EMIT | EMIT | EMIT |       vio -         |
+            | [q3 *] | EMIT | EMIT | EMIT | EMIT |       vio *         |
+            | [q4 *] | EMIT | EMIT | EMIT | EMIT |       vio /         |
+            +--------+------+------+------+------+----------------------+
+            |  >  = estado inicial     * = estado de aceptacion          |
+            +------------------------------------------------------------+
+            """);
+    }
+
+    public static void ShowSpecialSymTable()
+    {
+        Console.WriteLine("""
+            +------------------------------------------------------------+
+            |    AFD SIMBOLOS ESPECIALES - Tabla de transiciones         |
+            |    Reconoce: (  )  {  }  ,  ;  .                          |
+            +--------+------+------+------+------+------+------+--------+
+            | Estado |  (   |  )   |  {   |  }   |  ,   |  ;   |  .    |
+            +--------+------+------+------+------+------+------+--------+
+            | q0  >  | ->q1*| ->q2*| ->q3*| ->q4*| ->q5*| ->q6*| ->q7* |
+            +--------+------+------+------+------+------+------+--------+
+            |  >  = estado inicial     * = estado de aceptacion          |
+            +------------------------------------------------------------+
             """);
     }
 

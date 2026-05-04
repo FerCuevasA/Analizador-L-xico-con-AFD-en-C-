@@ -3,8 +3,11 @@ namespace LexerProject;
 // ── Clasificacion de caracteres para los AFD ─────────────────────────────────
 public enum CharClass
 {
-    Letter, Digit, Underscore, Quote, LT, GT,
-    EQ, Bang, Slash, Dot, Newline, Space, Other
+    Letter, Digit, Underscore, Quote,
+    LT, GT, EQ, Bang, Slash, Dot, Newline, Space,
+    Plus, Minus, Star,
+    LParen, RParen, LBrace, RBrace, Comma, Semi,
+    Other
 }
 
 // ── Clase base abstracta ──────────────────────────────────────────────────────
@@ -30,6 +33,15 @@ public abstract class Automata
         '.'                                          => CharClass.Dot,
         '\n'                                         => CharClass.Newline,
         ' ' or '\t' or '\r'                          => CharClass.Space,
+        '+'                                          => CharClass.Plus,
+        '-'                                          => CharClass.Minus,
+        '*'                                          => CharClass.Star,
+        '('                                          => CharClass.LParen,
+        ')'                                          => CharClass.RParen,
+        '{'                                          => CharClass.LBrace,
+        '}'                                          => CharClass.RBrace,
+        ','                                          => CharClass.Comma,
+        ';'                                          => CharClass.Semi,
         _                                            => CharClass.Other
     };
 
@@ -117,26 +129,110 @@ public sealed class RealAutomata : Automata
 }
 
 // ── OPERADORES RELACIONALES ───────────────────────────────────────────────────
-// Reconoce: <  <=  >  >=  =  ==  !=
-// q1*=<  q2*=<=  q3*=>  q4*=>=  q5*==  q6*===  q7=!  q8*=!=
+// Reconoce: <  <=  >  >=  ==  !=   (NO acepta = simple — lo maneja AssignAutomata)
+// q1*=<  q2*=<=  q3*=>  q4*=>=  q5=primer=  q6*===  q7=!  q8*=!=
 public sealed class RelOpAutomata : Automata
 {
     private static readonly Dictionary<(int, CharClass), int> _t = new()
     {
-        [(0, CharClass.LT)]     = 1,
-        [(1, CharClass.EQ)]     = 2,
-        [(0, CharClass.GT)]     = 3,
-        [(3, CharClass.EQ)]     = 4,
-        [(0, CharClass.EQ)]     = 5,
-        [(5, CharClass.EQ)]     = 6,
-        [(0, CharClass.Bang)]   = 7,
-        [(7, CharClass.EQ)]     = 8,
+        [(0, CharClass.LT)]   = 1,
+        [(1, CharClass.EQ)]   = 2,
+        [(0, CharClass.GT)]   = 3,
+        [(3, CharClass.EQ)]   = 4,
+        [(0, CharClass.EQ)]   = 5,   // q5 NO es aceptante — espera segundo '='
+        [(5, CharClass.EQ)]   = 6,
+        [(0, CharClass.Bang)] = 7,
+        [(7, CharClass.EQ)]   = 8,
     };
 
     public override int          InitialState    => 0;
-    public override int[]        AcceptingStates => [1, 2, 3, 4, 5, 6, 8];
+    public override int[]        AcceptingStates => [1, 2, 3, 4, 6, 8]; // sin q5
     public override TokenType    TokenType       => TokenType.REL_OP;
     public override string       Name            => "OPERADORES RELACIONALES";
+    public override Dictionary<(int, CharClass), int> Transitions => _t;
+}
+
+// ── OPERADORES DE ASIGNACION COMPUESTOS ──────────────────────────────────────
+// Reconoce: +=  -=  *=  /=
+// q0 --[+]--> q1 --[=]--> q2*
+// q0 --[-]--> q3 --[=]--> q4*
+// q0 --[*]--> q5 --[=]--> q6*
+// q0 --[/]--> q7 --[=]--> q8*
+public sealed class CompoundAssignAutomata : Automata
+{
+    private static readonly Dictionary<(int, CharClass), int> _t = new()
+    {
+        [(0, CharClass.Plus)]  = 1,
+        [(1, CharClass.EQ)]    = 2,
+        [(0, CharClass.Minus)] = 3,
+        [(3, CharClass.EQ)]    = 4,
+        [(0, CharClass.Star)]  = 5,
+        [(5, CharClass.EQ)]    = 6,
+        [(0, CharClass.Slash)] = 7,
+        [(7, CharClass.EQ)]    = 8,
+    };
+
+    public override int          InitialState    => 0;
+    public override int[]        AcceptingStates => [2, 4, 6, 8];
+    public override TokenType    TokenType       => TokenType.ASSIGN_OP;
+    public override string       Name            => "ASIGNACION COMPUESTA";
+    public override Dictionary<(int, CharClass), int> Transitions => _t;
+}
+
+// ── ASIGNACION SIMPLE ─────────────────────────────────────────────────────────
+// Reconoce: =    (q0 --[=]--> q1*)
+public sealed class AssignAutomata : Automata
+{
+    private static readonly Dictionary<(int, CharClass), int> _t = new()
+    {
+        [(0, CharClass.EQ)] = 1,
+    };
+
+    public override int          InitialState    => 0;
+    public override int[]        AcceptingStates => [1];
+    public override TokenType    TokenType       => TokenType.ASSIGN_OP;
+    public override string       Name            => "ASIGNACION SIMPLE";
+    public override Dictionary<(int, CharClass), int> Transitions => _t;
+}
+
+// ── OPERADORES ARITMETICOS ────────────────────────────────────────────────────
+// Reconoce: +  -  *  /   (cada uno en un estado distinto)
+public sealed class ArithOpAutomata : Automata
+{
+    private static readonly Dictionary<(int, CharClass), int> _t = new()
+    {
+        [(0, CharClass.Plus)]  = 1,
+        [(0, CharClass.Minus)] = 2,
+        [(0, CharClass.Star)]  = 3,
+        [(0, CharClass.Slash)] = 4,
+    };
+
+    public override int          InitialState    => 0;
+    public override int[]        AcceptingStates => [1, 2, 3, 4];
+    public override TokenType    TokenType       => TokenType.ARITH_OP;
+    public override string       Name            => "OPERADORES ARITMETICOS";
+    public override Dictionary<(int, CharClass), int> Transitions => _t;
+}
+
+// ── SIMBOLOS ESPECIALES ───────────────────────────────────────────────────────
+// Reconoce: ( ) { } , ; .
+public sealed class SpecialSymAutomata : Automata
+{
+    private static readonly Dictionary<(int, CharClass), int> _t = new()
+    {
+        [(0, CharClass.LParen)] = 1,
+        [(0, CharClass.RParen)] = 2,
+        [(0, CharClass.LBrace)] = 3,
+        [(0, CharClass.RBrace)] = 4,
+        [(0, CharClass.Comma)]  = 5,
+        [(0, CharClass.Semi)]   = 6,
+        [(0, CharClass.Dot)]    = 7,
+    };
+
+    public override int          InitialState    => 0;
+    public override int[]        AcceptingStates => [1, 2, 3, 4, 5, 6, 7];
+    public override TokenType    TokenType       => TokenType.SPECIAL_SYM;
+    public override string       Name            => "SIMBOLOS ESPECIALES";
     public override Dictionary<(int, CharClass), int> Transitions => _t;
 }
 

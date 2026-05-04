@@ -24,6 +24,13 @@ public class LexerTests
         return v;
     }
 
+    private static SymbolTable Symbols(string src)
+    {
+        var lexer = new Lexer(src);
+        lexer.Tokenize();
+        return lexer.SymbolTable;
+    }
+
     // ── IDENTIFIER ──────────────────────────────────────────────────────────
     [Fact] public void Identifier_Simple()
     {
@@ -92,7 +99,6 @@ public class LexerTests
 
     [Fact] public void Real_NotMatchedWhenNoDot()
     {
-        // "3" alone must be INTEGER, not REAL
         var t = First("3");
         Assert.Equal(TokenType.INTEGER, t.Type);
     }
@@ -105,11 +111,76 @@ public class LexerTests
     [InlineData("!=", "!=")]
     [InlineData("<",  "<")]
     [InlineData(">",  ">")]
-    [InlineData("=",  "=")]
     public void RelOp_AllOperators(string src, string expected)
     {
         var t = First(src);
         Assert.Equal(TokenType.REL_OP, t.Type);
+        Assert.Equal(expected, t.Lexeme);
+    }
+
+    // ── ASSIGN_OP ───────────────────────────────────────────────────────────
+    [Theory]
+    [InlineData("=",  "=")]
+    [InlineData("+=", "+=")]
+    [InlineData("-=", "-=")]
+    [InlineData("*=", "*=")]
+    [InlineData("/=", "/=")]
+    public void AssignOp_AllOperators(string src, string expected)
+    {
+        var t = First(src);
+        Assert.Equal(TokenType.ASSIGN_OP, t.Type);
+        Assert.Equal(expected, t.Lexeme);
+    }
+
+    [Fact] public void AssignOp_NotConfusedWithEqEq()
+    {
+        // == debe ser REL_OP, no ASSIGN_OP
+        var t = First("==");
+        Assert.Equal(TokenType.REL_OP, t.Type);
+        Assert.Equal("==", t.Lexeme);
+    }
+
+    // ── ARITH_OP ────────────────────────────────────────────────────────────
+    [Theory]
+    [InlineData("+", "+")]
+    [InlineData("-", "-")]
+    [InlineData("*", "*")]
+    [InlineData("/", "/")]
+    public void ArithOp_AllOperators(string src, string expected)
+    {
+        var t = First(src);
+        Assert.Equal(TokenType.ARITH_OP, t.Type);
+        Assert.Equal(expected, t.Lexeme);
+    }
+
+    [Fact] public void ArithOp_PlusNotConfusedWithPlusAssign()
+    {
+        // += debe ser ASSIGN_OP, no ARITH_OP
+        var t = First("+=");
+        Assert.Equal(TokenType.ASSIGN_OP, t.Type);
+        Assert.Equal("+=", t.Lexeme);
+    }
+
+    [Fact] public void ArithOp_SlashNotConfusedWithComment()
+    {
+        // // debe ser LINE_COMMENT, no ARITH_OP
+        var t = First("// comentario");
+        Assert.Equal(TokenType.LINE_COMMENT, t.Type);
+    }
+
+    // ── SPECIAL_SYM ─────────────────────────────────────────────────────────
+    [Theory]
+    [InlineData("(", "(")]
+    [InlineData(")", ")")]
+    [InlineData("{", "{")]
+    [InlineData("}", "}")]
+    [InlineData(",", ",")]
+    [InlineData(";", ";")]
+    [InlineData(".", ".")]
+    public void SpecialSym_AllSymbols(string src, string expected)
+    {
+        var t = First(src);
+        Assert.Equal(TokenType.SPECIAL_SYM, t.Type);
         Assert.Equal(expected, t.Lexeme);
     }
 
@@ -163,7 +234,8 @@ public class LexerTests
     [InlineData("if")]
     [InlineData("while")]
     [InlineData("return")]
-    [InlineData("class")]
+    [InlineData("true")]
+    [InlineData("false")]
     [InlineData("void")]
     public void Keyword_RecognizedCorrectly(string kw)
     {
@@ -174,19 +246,65 @@ public class LexerTests
 
     [Fact] public void Keyword_IdentifierNotMistaken()
     {
-        // "iff" is not a keyword
         var t = First("iff");
         Assert.Equal(TokenType.IDENTIFIER, t.Type);
     }
 
-    // ── UNKNOWN / ERRORES ────────────────────────────────────────────────────
-    [Fact] public void Unknown_Semicolon()
+    // ── TOKEN IDS ────────────────────────────────────────────────────────────
+    [Fact] public void TokenId_Keyword_Int()   => Assert.Equal(104, First("int").Id);
+    [Fact] public void TokenId_Keyword_If()    => Assert.Equal(100, First("if").Id);
+    [Fact] public void TokenId_Keyword_True()  => Assert.Equal(108, First("true").Id);
+    [Fact] public void TokenId_Keyword_False() => Assert.Equal(109, First("false").Id);
+    [Fact] public void TokenId_Identifier()    => Assert.Equal(200, First("x").Id);
+    [Fact] public void TokenId_Integer()       => Assert.Equal(201, First("42").Id);
+    [Fact] public void TokenId_Real()          => Assert.Equal(202, First("3.14").Id);
+    [Fact] public void TokenId_Plus()          => Assert.Equal(300, First("+").Id);
+    [Fact] public void TokenId_Assign()        => Assert.Equal(320, First("=").Id);
+    [Fact] public void TokenId_PlusAssign()    => Assert.Equal(321, First("+=").Id);
+    [Fact] public void TokenId_EqEq()          => Assert.Equal(310, First("==").Id);
+    [Fact] public void TokenId_GEQ()           => Assert.Equal(315, First(">=").Id);
+    [Fact] public void TokenId_LParen()        => Assert.Equal(400, First("(").Id);
+    [Fact] public void TokenId_Semi()          => Assert.Equal(405, First(";").Id);
+
+    // ── TABLA DE SIMBOLOS ────────────────────────────────────────────────────
+    [Fact] public void SymbolTable_InsertsIdentifier()
     {
-        var t = First(";");
-        Assert.Equal(TokenType.UNKNOWN, t.Type);
-        Assert.Equal(";", t.Lexeme);
+        var st = Symbols("int precio");
+        Assert.Contains(st.Entries, e => e.Lexeme == "precio" && e.Kind == "ID");
     }
 
+    [Fact] public void SymbolTable_InsertsFloat()
+    {
+        var st = Symbols("3.14");
+        Assert.Contains(st.Entries, e => e.Lexeme == "3.14" && e.Kind == "FLOAT");
+    }
+
+    [Fact] public void SymbolTable_InsertsInteger()
+    {
+        var st = Symbols("42");
+        Assert.Contains(st.Entries, e => e.Lexeme == "42" && e.Kind == "INTEGER");
+    }
+
+    [Fact] public void SymbolTable_NoDuplicates()
+    {
+        var st = Symbols("x + x + x");
+        Assert.Single(st.Entries.Where(e => e.Lexeme == "x"));
+    }
+
+    [Fact] public void SymbolTable_NoKeywords()
+    {
+        var st = Symbols("int if while");
+        Assert.DoesNotContain(st.Entries, e => e.Lexeme == "int");
+        Assert.DoesNotContain(st.Entries, e => e.Lexeme == "if");
+    }
+
+    [Fact] public void SymbolTable_NoOperators()
+    {
+        var st = Symbols("x += 1");
+        Assert.DoesNotContain(st.Entries, e => e.Lexeme == "+=");
+    }
+
+    // ── UNKNOWN / ERRORES ────────────────────────────────────────────────────
     [Fact] public void Unknown_AtSign()
     {
         var t = First("@");
@@ -199,26 +317,32 @@ public class LexerTests
         Assert.Equal(TokenType.UNKNOWN, t.Type);
     }
 
+    [Fact] public void Unknown_Dollar()
+    {
+        var t = First("$");
+        Assert.Equal(TokenType.UNKNOWN, t.Type);
+    }
+
     // ── COMBINACIONES ────────────────────────────────────────────────────────
     [Fact] public void Combined_IntDeclaration()
     {
         var tokens = All("int x = 3.14;");
         Assert.Equal(TokenType.KEYWORD,    tokens[0].Type); // int
         Assert.Equal(TokenType.IDENTIFIER, tokens[1].Type); // x
-        Assert.Equal(TokenType.REL_OP,     tokens[2].Type); // =
+        Assert.Equal(TokenType.ASSIGN_OP,  tokens[2].Type); // =  (no REL_OP)
         Assert.Equal(TokenType.REAL,       tokens[3].Type); // 3.14
-        Assert.Equal(TokenType.UNKNOWN,    tokens[4].Type); // ;
+        Assert.Equal(TokenType.SPECIAL_SYM,tokens[4].Type); // ;  (no UNKNOWN)
     }
 
     [Fact] public void Combined_IfStatement()
     {
         var tokens = All("if (x != 0)");
         Assert.Equal(TokenType.KEYWORD,    tokens[0].Type); // if
-        Assert.Equal(TokenType.UNKNOWN,    tokens[1].Type); // (
+        Assert.Equal(TokenType.SPECIAL_SYM,tokens[1].Type); // (
         Assert.Equal(TokenType.IDENTIFIER, tokens[2].Type); // x
         Assert.Equal(TokenType.REL_OP,     tokens[3].Type); // !=
         Assert.Equal(TokenType.INTEGER,    tokens[4].Type); // 0
-        Assert.Equal(TokenType.UNKNOWN,    tokens[5].Type); // )
+        Assert.Equal(TokenType.SPECIAL_SYM,tokens[5].Type); // )
     }
 
     [Fact] public void Combined_LineAndColumn()
@@ -226,6 +350,15 @@ public class LexerTests
         var tokens = All("int\nx");
         Assert.Equal(1, tokens[0].Line); Assert.Equal(1, tokens[0].Col);
         Assert.Equal(2, tokens[1].Line); Assert.Equal(1, tokens[1].Col);
+    }
+
+    [Fact] public void Combined_CompoundAssign()
+    {
+        var tokens = All("x += 1");
+        Assert.Equal(TokenType.IDENTIFIER, tokens[0].Type); // x
+        Assert.Equal(TokenType.ASSIGN_OP,  tokens[1].Type); // +=
+        Assert.Equal("+=", tokens[1].Lexeme);
+        Assert.Equal(TokenType.INTEGER,    tokens[2].Type); // 1
     }
 
     // ── VALIDACION CRUZADA ───────────────────────────────────────────────────
@@ -247,11 +380,29 @@ public class LexerTests
         Assert.True(v.IsMatch);
     }
 
+    [Fact] public void CrossValidation_AssignOpMatchesRegex()
+    {
+        var v = Validations("+=").First(x => x.Token.Type == TokenType.ASSIGN_OP);
+        Assert.True(v.IsMatch);
+    }
+
+    [Fact] public void CrossValidation_ArithOpMatchesRegex()
+    {
+        var v = Validations("+").First(x => x.Token.Type == TokenType.ARITH_OP);
+        Assert.True(v.IsMatch);
+    }
+
+    [Fact] public void CrossValidation_SpecialSymMatchesRegex()
+    {
+        var v = Validations(";").First(x => x.Token.Type == TokenType.SPECIAL_SYM);
+        Assert.True(v.IsMatch);
+    }
+
     [Fact] public void CrossValidation_NoValidationForUnknown()
     {
-        var (tokens, validations) = new Lexer(";").Tokenize();
+        var (tokens, validations) = new Lexer("$").Tokenize();
         Assert.Equal(TokenType.UNKNOWN, tokens[0].Type);
-        Assert.Empty(validations); // UNKNOWN no entra en validacion cruzada
+        Assert.Empty(validations);
     }
 
     // ── AUTOMATA UNITARIOS ───────────────────────────────────────────────────
@@ -264,14 +415,27 @@ public class LexerTests
     [Fact] public void Automata_RealRequiresDigitAfterDot()
     {
         var (ok, _) = new RealAutomata().Run("3.", 0);
-        Assert.False(ok); // "3." no es REAL valido
+        Assert.False(ok);
     }
 
     [Fact] public void Automata_RelOpMaximalMunch()
     {
-        // "<=" debe ganar sobre "<" solo
         var (ok, lex) = new RelOpAutomata().Run("<=", 0);
         Assert.True(ok);
         Assert.Equal("<=", lex);
+    }
+
+    [Fact] public void Automata_RelOpDoesNotAcceptBareAssign()
+    {
+        // = solo NO debe ser aceptado por RelOpAutomata
+        var (ok, _) = new RelOpAutomata().Run("= ", 0);
+        Assert.False(ok);
+    }
+
+    [Fact] public void Automata_CompoundAssignMaximalMunch()
+    {
+        var (ok, lex) = new CompoundAssignAutomata().Run("+=", 0);
+        Assert.True(ok);
+        Assert.Equal("+=", lex);
     }
 }

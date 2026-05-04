@@ -9,36 +9,44 @@ public class Lexer
     private static readonly HashSet<string> Keywords = new(StringComparer.Ordinal)
     {
         "if", "else", "while", "for", "int",
-        "float", "string", "return", "void", "class"
+        "float", "return", "void", "true", "false"
     };
 
-    // Regex SOLO para validacion cruzada al final (no como mecanismo de reconocimiento)
+    // Regex SOLO para validacion cruzada (no para reconocer)
     private static readonly Dictionary<TokenType, string> RegexPatterns = new()
     {
-        [TokenType.IDENTIFIER]   = @"^[a-zA-Z_][a-zA-Z0-9_]*$",
-        [TokenType.INTEGER]      = @"^[0-9]+$",
-        [TokenType.REAL]         = @"^[0-9]+\.[0-9]+$",
-        [TokenType.REL_OP]       = @"^(<=|>=|==|!=|<|>|=)$",
-        [TokenType.STRING]       = "^\"[^\"\n]*\"$",
-        [TokenType.LINE_COMMENT] = @"^//[^\n]*$",
-        [TokenType.KEYWORD]      = @"^(if|else|while|for|int|float|string|return|void|class)$",
+        [TokenType.IDENTIFIER]  = @"^[a-zA-Z_][a-zA-Z0-9_]*$",
+        [TokenType.INTEGER]     = @"^[0-9]+$",
+        [TokenType.REAL]        = @"^[0-9]+\.[0-9]+$",
+        [TokenType.REL_OP]      = @"^(<=|>=|==|!=|<|>)$",
+        [TokenType.ASSIGN_OP]   = @"^(=|\+=|-=|\*=|/=)$",
+        [TokenType.ARITH_OP]    = @"^[+\-*/]$",
+        [TokenType.SPECIAL_SYM] = @"^[(){},;.]$",
+        [TokenType.STRING]      = "^\"[^\"\n]*\"$",
+        [TokenType.LINE_COMMENT]= @"^//[^\n]*$",
+        [TokenType.KEYWORD]     = @"^(if|else|while|for|int|float|return|void|true|false)$",
     };
 
     private readonly string _source;
 
-    // Orden importante: REAL antes que INTEGER para maximal-munch
+    // Orden critico: maximal-munch requiere probar compuestos antes que simples
     private readonly List<Automata> _automata =
     [
-        new RealAutomata(),
+        new RealAutomata(),           // float antes que int
         new IntegerAutomata(),
-        new IdentifierAutomata(),
-        new RelOpAutomata(),
+        new IdentifierAutomata(),     // keywords se detectan post-emision
+        new LineCommentAutomata(),    // // antes que /
+        new CompoundAssignAutomata(), // += -= *= /= antes que + - * / y =
+        new RelOpAutomata(),          // == != <= >= < > (sin = simple)
+        new AssignAutomata(),         // = simple
+        new ArithOpAutomata(),        // + - * /
+        new SpecialSymAutomata(),     // ( ) { } , ; .
         new StringAutomata(),
-        new LineCommentAutomata(),
         new WhitespaceAutomata(),
     ];
 
-    // Normaliza \r\n y \r sueltos a \n para evitar que \r quede dentro de lexemas
+    public SymbolTable SymbolTable { get; } = new();
+
     public Lexer(string source) => _source = source.Replace("\r\n", "\n").Replace("\r", "\n");
 
     public (List<Token> tokens, List<ValidationResult> validations) Tokenize()
@@ -66,7 +74,9 @@ public class Lexer
                 if (type == TokenType.IDENTIFIER && Keywords.Contains(lexeme))
                     type = TokenType.KEYWORD;
 
-                tokens.Add(new Token(type, lexeme, line, col, pos));
+                var token = new Token(type, lexeme, line, col, pos);
+                tokens.Add(token);
+                SymbolTable.TryInsert(token);
                 (pos, line, col) = Advance(pos, line, col, lexeme);
                 matched = true;
                 break;

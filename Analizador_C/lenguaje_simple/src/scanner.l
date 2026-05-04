@@ -60,21 +60,21 @@ void lex_error(const char *bad_char);
 %}
 
 /* ── OPCIONES DE FLEX ────────────────────────────────────────────────────── */
-%option noyywrap   /* no necesita función yywrap() al llegar a EOF          */
-%option yylineno   /* flex mantiene yylineno con el número de línea actual  */
+%option noyywrap
+%option yylineno
 
 /* ── MACROS DE EXPRESIONES REGULARES ────────────────────────────────────── */
 /*
  * Se definen aquí para que las reglas sean más legibles.
  * Cada macro aparece documentada con su expresión regular equivalente.
  */
-LETTER   [a-zA-Z_]              /* letra o guion bajo (inicio de ID)        */
-DIGIT    [0-9]                  /* dígito decimal                           */
-ID       {LETTER}({LETTER}|{DIGIT})*   /* identificador                    */
-INT      {DIGIT}+               /* uno o más dígitos                        */
-FLOAT    {DIGIT}+\.{DIGIT}+     /* dígitos, punto, dígitos                  */
-COMMENT  \/\/[^\n]*             /* // seguido de cualquier cosa hasta \n    */
-BLANK    [ \t\r]+               /* espacios/tabulaciones (no \n)            */
+LETTER   [a-zA-Z_]
+DIGIT    [0-9]
+ID       {LETTER}({LETTER}|{DIGIT})*
+INT      {DIGIT}+
+FLOAT    {DIGIT}+\.{DIGIT}+
+COMMENT  \/\/[^\n]*
+BLANK    [ \t\r]+
 
 /* ── SECCIÓN 2: REGLAS ───────────────────────────────────────────────────── */
 %%
