@@ -1,0 +1,11 @@
+// Test: todos los operadores relacionales
+a = b
+a == b
+a != b
+a < b
+a <= b
+a > b
+a >= b
+x = 3.14
+y == 100
+z != 0
