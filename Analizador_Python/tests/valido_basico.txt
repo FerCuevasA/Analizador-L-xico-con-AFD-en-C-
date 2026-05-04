@@ -1,0 +1,10 @@
+// Test: keywords, identificadores, enteros y reales
+int contador = 0
+float precio = 3.14
+int _resultado = 100
+void retornar
+return valor
+while x > 0
+if y == 10
+else z != 99
+for i = 0

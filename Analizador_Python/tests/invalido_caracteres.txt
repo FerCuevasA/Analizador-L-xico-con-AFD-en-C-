@@ -1,0 +1,10 @@
+// Test: caracteres no reconocidos (todos deben ser ERROR LEXICO)
+int x = 5;
+if (x > 0) {
+    return x + 1;
+}
+a @ b
+precio #100
+x % y
+a & b
+x | y

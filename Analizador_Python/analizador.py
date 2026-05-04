@@ -475,7 +475,60 @@ def imprimir_tabla(tokens):
 #  MENÚ INTERACTIVO
 # =============================================================================
 
+import os
+
 EJEMPLO = 'int precio = 3.14;\nif (precio >= 0.0) // ok\nreturn precio;'
+
+# Directorio de tests relativo a este archivo
+TESTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests")
+
+
+def correr_tests():
+    """
+    Lee todos los archivos .txt de la carpeta tests/, los tokeniza
+    y muestra los resultados uno por uno con un resumen al final.
+    """
+    if not os.path.isdir(TESTS_DIR):
+        print(f"No se encontró la carpeta tests/ en {TESTS_DIR}")
+        return
+
+    archivos = sorted(f for f in os.listdir(TESTS_DIR) if f.endswith(".txt"))
+
+    if not archivos:
+        print("No hay archivos .txt en la carpeta tests/")
+        return
+
+    total_tokens  = 0
+    total_errores = 0
+
+    for nombre in archivos:
+        ruta = os.path.join(TESTS_DIR, nombre)
+
+        with open(ruta, encoding="utf-8") as f:
+            codigo = f.read()
+
+        tokens  = tokenizar(codigo)
+        errores = [t for t in tokens if t.tipo == "UNKNOWN"]
+
+        total_tokens  += len(tokens)
+        total_errores += len(errores)
+
+        # Encabezado del archivo
+        ancho = 50
+        print("=" * ancho)
+        print(f"  {nombre}")
+        estado = "CON ERRORES LÉXICOS" if errores else "sin errores léxicos"
+        print(f"  {len(tokens)} tokens — {estado}")
+        print("=" * ancho)
+
+        imprimir_tabla(tokens)
+        print()
+
+    # Resumen global
+    print("-" * 50)
+    print(f"  RESUMEN: {len(archivos)} archivos | "
+          f"{total_tokens} tokens | {total_errores} errores léxicos")
+    print("-" * 50)
 
 
 def menu():
@@ -484,7 +537,8 @@ def menu():
     print("=" * 50)
     print("1. Ejecutar ejemplo predefinido")
     print("2. Ingresar código propio")
-    print("3. Salir")
+    print("3. Correr tests (carpeta tests/)")
+    print("4. Salir")
     print()
 
     while True:
@@ -512,10 +566,14 @@ def menu():
                 print("(entrada vacía)")
 
         elif opcion == "3":
+            print()
+            correr_tests()
+
+        elif opcion == "4":
             print("Hasta luego.")
             break
 
-        else:
+        elif opcion != "":
             print("Opción no válida.")
 
         print()

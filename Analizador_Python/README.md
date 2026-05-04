@@ -18,7 +18,7 @@ Requiere Python 3.8 o superior. El script `run.sh` lo detecta automáticamente.
 El AFD no trabaja con caracteres individuales (`'a'`, `'3'`, `'<'`) sino con **clases**. La función `clasificar(c)` convierte cada carácter en su clase:
 
 | Clase | Caracteres |
-|---|---|
+| --- | --- |
 | `LETTER` | a-z, A-Z |
 | `DIGIT` | 0-9 |
 | `UNDERSCORE` | `_` |
@@ -34,13 +34,13 @@ Esto reduce las tablas de transición: en vez de una fila por carácter, una fil
 
 Cada autómata es un diccionario de transiciones:
 
-```
+```python
 { (estado_actual, clase_char): estado_siguiente }
 ```
 
 El método `ejecutar()` implementa **maximal-munch**: avanza mientras haya una transición válida y guarda la última posición donde estuvo en un estado aceptante. Esto garantiza que `>=` se reconoce completo y no como `>` + `=`.
 
-```
+```text
 Ejemplo: AutomataReal sobre "3.14xyz"
   '3' DIGIT  → estado 1
   '.' DOT    → estado 2
@@ -53,7 +53,7 @@ Ejemplo: AutomataReal sobre "3.14xyz"
 ### 3. Autómatas por tipo de token
 
 | Autómata | Reconoce | Estados |
-|---|---|---|
+| --- | --- | --- |
 | `AutomataIdentificador` | `precio`, `x`, `_var` | q0 → q1\* |
 | `AutomataEntero` | `42`, `0` | q0 → q1\* |
 | `AutomataReal` | `3.14`, `0.5` | q0 → q1 → q2 → q3\* |
@@ -68,7 +68,7 @@ Ejemplo: AutomataReal sobre "3.14xyz"
 
 Recorre el código fuente posición a posición. En cada posición prueba los autómatas **en orden**:
 
-```
+```text
 [AutomataReal, AutomataEntero, AutomataIdentificador, AutomataRelOp,
  AutomataCadena, AutomataComentario, AutomataEspacio]
 ```
@@ -81,7 +81,7 @@ Después del reconocimiento, si el token es `IDENTIFIER` y el lexema está en la
 
 ### 5. Flujo completo
 
-```
+```text
 Código fuente (string)
         │
         ▼
@@ -101,7 +101,7 @@ Código fuente (string)
 ## Tokens reconocidos
 
 | Tipo | Ejemplos |
-|---|---|
+| --- | --- |
 | `KEYWORD` | `if` `else` `while` `for` `int` `float` `return` `void` `class` |
 | `IDENTIFIER` | `x` `precio1` `_var` |
 | `INTEGER` | `42` `0` `100` |
@@ -111,11 +111,23 @@ Código fuente (string)
 | `LINE_COMMENT` | `// comentario` |
 | `UNKNOWN` | `;` `(` `)` `+` (error léxico) |
 
+## Tests
+
+Los archivos de prueba están en `tests/`. Para correrlos, usar la opción **4** del menú.
+
+| Archivo | Qué prueba |
+| --- | --- |
+| `tests/valido_basico.txt` | keywords, identificadores, enteros, reales |
+| `tests/valido_operadores.txt` | todos los operadores relacionales |
+| `tests/valido_cadenas.txt` | strings y comentarios |
+| `tests/invalido_caracteres.txt` | caracteres no reconocidos (errores léxicos) |
+| `tests/invalido_mixto.txt` | mezcla de tokens válidos e inválidos |
+
 ## Ejemplo de salida
 
 Entrada: `int precio = 3.14; if (precio >= 0.0) // ok`
 
-```
+```text
 Pos   Token           Lexema          Línea   Col
 ---------------------------------------------------------
 0     KEYWORD         'int'           1       1
@@ -134,14 +146,17 @@ Pos   Token           Lexema          Línea   Col
 
 > Los `UNKNOWN` son esperados: este lenguaje de prueba no tiene definidos `;`, `(` ni `)`.
 
-## Estructura del archivo
+## Estructura del proyecto
 
-```
-analizador.py
-├── Paso 1: clasificar(c)              → clases de caracteres
-├── Paso 2: class Token                → estructura de un token
-├── Paso 3: class Automata             → AFD genérico + maximal-munch
-├── Paso 4: AutomataXxx (×7)           → un AFD por tipo de token
-├── Paso 5: tokenizar(fuente)          → el lexer principal
-└── Paso 6: imprimir_tabla + menu()    → interfaz de usuario
+```text
+Analizador_Python/
+├── analizador.py        ← código fuente principal
+├── run.sh               ← script de ejecución para Mac
+├── README.md            ← esta documentación
+└── tests/
+    ├── valido_basico.txt
+    ├── valido_operadores.txt
+    ├── valido_cadenas.txt
+    ├── invalido_caracteres.txt
+    └── invalido_mixto.txt
 ```
