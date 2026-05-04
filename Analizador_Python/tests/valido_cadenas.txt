@@ -4,4 +4,4 @@ string vacio = ""
 string con_espacios = "precio es 3.14"
 // este es un comentario completo
 int x = 1 // comentario al final de linea
-string mezcla = "abc 123"
+string mezcla = "abc 123 + - *"

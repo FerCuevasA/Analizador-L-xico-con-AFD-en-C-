@@ -1,0 +1,9 @@
+// Test: simbolos especiales y cadenas
+int suma(int a, int b) {
+    return a + b;
+}
+string msg = "hola mundo"
+string vacio = ""
+if (x > 0) {
+    x -= 1;
+}

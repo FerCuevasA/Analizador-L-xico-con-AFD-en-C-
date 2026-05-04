@@ -1,11 +1,12 @@
-// Test: mezcla de tokens validos e invalidos
+// Test: programa completo con tokens validos e invalidos
 int precio = 3.14;
 float _tasa = 0.05;
 if (precio >= 100.0) {
     return precio;
 }
 while (x != 0) {
-    x = x - 1;
+    x -= 1;
 }
 string msg = "ok"
 resultado == total + 1
+a @ b

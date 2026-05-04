@@ -8,3 +8,4 @@ while x > 0
 if y == 10
 else z != 99
 for i = 0
+true false

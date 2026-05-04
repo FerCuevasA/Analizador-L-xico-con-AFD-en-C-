@@ -4,14 +4,17 @@
 # =============================================================================
 #
 #  Tokens reconocidos:
-#    KEYWORD      → if else while for int float string return void class
-#    IDENTIFIER   → letra o _ seguido de letras, dígitos o _
-#    INTEGER      → uno o más dígitos
-#    REAL         → dígitos . dígitos
-#    REL_OP       → < <= > >= = == !=
-#    STRING       → "..." (sin salto de línea)
-#    LINE_COMMENT → // hasta fin de línea
-#    UNKNOWN      → cualquier carácter no reconocido (error léxico)
+#    KEYWORD          → if else while for int float return void true false
+#    IDENTIFIER       → letra o _ seguido de letras, dígitos o _
+#    INTEGER          → uno o más dígitos
+#    REAL             → dígitos . dígitos
+#    REL_OP           → == != < <= > >=
+#    ASSIGN_OP        → =  +=  -=  *=  /=
+#    ARITH_OP         → +  -  *  /
+#    SYM_LPAREN/etc.  → (  )  {  }  ,  ;  .
+#    STRING           → "..." (sin salto de línea)
+#    LINE_COMMENT     → // hasta fin de línea
+#    UNKNOWN          → cualquier carácter no reconocido (error léxico)
 # =============================================================================
 
 
@@ -36,9 +39,12 @@ EQ         = "EQ"           # =
 BANG       = "BANG"         # !
 SLASH      = "SLASH"        # /
 DOT        = "DOT"          # .
+PLUS       = "PLUS"         # +
+MINUS      = "MINUS"        # -
+STAR       = "STAR"         # *
 NEWLINE    = "NEWLINE"      # \n
 SPACE      = "SPACE"        # espacio, tabulación, \r
-OTHER      = "OTHER"        # cualquier otro carácter (ej. ; ( ) { } , + -)
+OTHER      = "OTHER"        # cualquier otro carácter (ej. ; ( ) { } , )
 
 
 def clasificar(c):
@@ -56,6 +62,9 @@ def clasificar(c):
     if c == '!':               return BANG
     if c == '/':               return SLASH
     if c == '.':               return DOT
+    if c == '+':               return PLUS
+    if c == '-':               return MINUS
+    if c == '*':               return STAR
     if c == '\n':              return NEWLINE
     if c in (' ', '\t', '\r'): return SPACE
     return OTHER
@@ -235,37 +244,121 @@ class AutomataReal(Automata):
 
 class AutomataRelOp(Automata):
     """
-    Reconoce: <  <=  >  >=  =  ==  !=
+    Reconoce: <  <=  >  >=  ==  !=
+    (El '=' simple ya NO está aquí — lo maneja AutomataAsignacion)
 
-    Diagrama (cada rama del AFD):
+    Diagrama:
       q0 --[LT]-->   q1*  (acepta "<")
       q1 --[EQ]-->   q2*  (acepta "<=")
 
       q0 --[GT]-->   q3*  (acepta ">")
       q3 --[EQ]-->   q4*  (acepta ">=")
 
-      q0 --[EQ]-->   q5*  (acepta "=")
-      q5 --[EQ]-->   q6*  (acepta "==")
+      q0 --[EQ]-->   q7   (estado intermedio: vio "=", espera otro "=")
+      q7 --[EQ]-->   q8*  (acepta "==")
 
-      q0 --[BANG]--> q7   (estado intermedio, NO acepta solo "!")
-      q7 --[EQ]-->   q8*  (acepta "!=")
+      q0 --[BANG]--> q5   (estado intermedio: vio "!", espera "=")
+      q5 --[EQ]-->   q6*  (acepta "!=")
 
-    El maximal-munch asegura que al ver "<=", el AFD no se queda con "<"
-    sino que sigue para reconocer "<=".
+    q7 NO es aceptante: el "=" solo nunca es REL_OP, es ASSIGN_OP.
     """
     estado_inicial     = 0
-    estados_aceptacion = {1, 2, 3, 4, 5, 6, 8}   # q7 no está incluido: "!" solo no es válido
+    estados_aceptacion = {1, 2, 3, 4, 6, 8}
     tipo_token         = "REL_OP"
     transiciones = {
         (0, LT):   1,
         (1, EQ):   2,
         (0, GT):   3,
         (3, EQ):   4,
-        (0, EQ):   5,
+        (0, BANG): 5,
         (5, EQ):   6,
-        (0, BANG): 7,
-        (7, EQ):   8,
+        (0, EQ):   7,   # intermedio — no acepta "=" solo
+        (7, EQ):   8,   # acepta "=="
     }
+
+
+class AutomataAsignacion(Automata):
+    """
+    Reconoce: =  +=  -=  *=  /=
+
+    Diagrama:
+      q0 --[EQ]-->    q1*  (acepta "=")
+      q0 --[PLUS]-->  q2   → q2 --[EQ]--> q3*  (acepta "+=")
+      q0 --[MINUS]--> q4   → q4 --[EQ]--> q5*  (acepta "-=")
+      q0 --[STAR]-->  q6   → q6 --[EQ]--> q7*  (acepta "*=")
+      q0 --[SLASH]--> q8   → q8 --[EQ]--> q9*  (acepta "/=")
+
+    Los estados intermedios q2,q4,q6,q8 NO son aceptantes:
+    "+", "-", "*", "/" solos los reconoce AutomataAritmetico.
+    Este autómata debe ir ANTES que AutomataAritmetico en la lista.
+    """
+    estado_inicial     = 0
+    estados_aceptacion = {1, 3, 5, 7, 9}
+    tipo_token         = "ASSIGN_OP"
+    transiciones = {
+        (0, EQ):    1,   # =
+        (0, PLUS):  2,   # + (intermedio)
+        (2, EQ):    3,   # +=
+        (0, MINUS): 4,   # - (intermedio)
+        (4, EQ):    5,   # -=
+        (0, STAR):  6,   # * (intermedio)
+        (6, EQ):    7,   # *=
+        (0, SLASH): 8,   # / (intermedio)
+        (8, EQ):    9,   # /=
+    }
+
+
+class AutomataAritmetico(Automata):
+    """
+    Reconoce: +  -  *  /
+
+    Diagrama:
+      q0 --[PLUS]-->  q1*
+      q0 --[MINUS]--> q2*
+      q0 --[STAR]-->  q3*
+      q0 --[SLASH]--> q4*
+
+    Debe ir DESPUÉS de AutomataAsignacion (para que "+=" no quede como "+" + "=")
+    y DESPUÉS de AutomataComentario (para que "//" no quede como "/" + "/").
+    """
+    estado_inicial     = 0
+    estados_aceptacion = {1, 2, 3, 4}
+    tipo_token         = "ARITH_OP"
+    transiciones = {
+        (0, PLUS):  1,
+        (0, MINUS): 2,
+        (0, STAR):  3,
+        (0, SLASH): 4,
+    }
+
+
+# Mapeo de carácter → tipo de token para símbolos de un solo carácter.
+# AutomataSimbolos.ejecutar() lo usa para devolver el tipo específico.
+SIMBOLOS = {
+    '(': 'SYM_LPAREN',
+    ')': 'SYM_RPAREN',
+    '{': 'SYM_LBRACE',
+    '}': 'SYM_RBRACE',
+    ',': 'SYM_COMMA',
+    ';': 'SYM_SEMI',
+    '.': 'SYM_DOT',
+}
+
+
+class AutomataSimbolos(Automata):
+    """
+    Reconoce: ( ) { } , ; .
+
+    Son todos tokens de un solo carácter, por lo que no necesitan una tabla
+    de transiciones: basta con verificar si el carácter está en SIMBOLOS.
+    Se sobreescribe ejecutar() para devolver también el tipo específico.
+    """
+    tipo_token = "_SYMBOL"   # el tokenizador lo reemplaza con el tipo real
+
+    def ejecutar(self, fuente, inicio):
+        if inicio < len(fuente) and fuente[inicio] in SIMBOLOS:
+            return True, fuente[inicio]
+        return False, ""
 
 
 class AutomataCadena(Automata):
@@ -286,7 +379,8 @@ class AutomataCadena(Automata):
     tipo_token         = "STRING"
 
     # Todas las clases posibles que pueden ir dentro de una cadena
-    _internas = [LETTER, DIGIT, UNDERSCORE, LT, GT, EQ, BANG, SLASH, DOT, SPACE, OTHER]
+    _internas = [LETTER, DIGIT, UNDERSCORE, LT, GT, EQ, BANG, SLASH, DOT,
+                 PLUS, MINUS, STAR, SPACE, OTHER]
 
     transiciones = {
         (0, QUOTE): 1,   # abre la cadena con "
@@ -315,7 +409,8 @@ class AutomataComentario(Automata):
     estados_aceptacion = {2, 3}
     tipo_token         = "LINE_COMMENT"
 
-    _contenido = [LETTER, DIGIT, UNDERSCORE, QUOTE, LT, GT, EQ, BANG, SLASH, DOT, SPACE, OTHER]
+    _contenido = [LETTER, DIGIT, UNDERSCORE, QUOTE, LT, GT, EQ, BANG, SLASH, DOT,
+                  PLUS, MINUS, STAR, SPACE, OTHER]
 
     transiciones = {
         (0, SLASH): 1,   # primer /
@@ -350,20 +445,25 @@ class AutomataEspacio(Automata):
 # Palabras reservadas del lenguaje.
 # Los identificadores que coincidan con estas se reclasifican como KEYWORD.
 KEYWORDS = {
-    "if", "else", "while", "for", "int",
-    "float", "string", "return", "void", "class"
+    "if", "else", "while", "for", "int", "float",
+    "return", "void", "true", "false",
 }
 
 # Lista de autómatas en orden de prioridad.
-# IMPORTANTE: AutomataReal va ANTES que AutomataEntero.
-# Sin esto, "3.14" se reconocería como INTEGER "3", punto, INTEGER "14".
+# El orden es crítico — igual que en el scanner.l de C:
+#   1. REAL antes que INTEGER        → "3.14" completo, no "3" + "." + "14"
+#   2. AutomataAsignacion antes que AutomataAritmetico → "+=" antes que "+"
+#   3. AutomataComentario antes que AutomataAritmetico → "//" antes que "/"
 AUTOMATAS = [
     AutomataReal(),
     AutomataEntero(),
     AutomataIdentificador(),
     AutomataRelOp(),
+    AutomataAsignacion(),     # = += -= *= /=  (antes que aritmético)
+    AutomataComentario(),     # //             (antes que aritmético, porque / es prefijo)
+    AutomataAritmetico(),     # + - * /
     AutomataCadena(),
-    AutomataComentario(),
+    AutomataSimbolos(),       # ( ) { } , ; .
     AutomataEspacio(),
 ]
 
@@ -403,10 +503,12 @@ def tokenizar(fuente):
                 reconocido = True
                 break
 
-            # Verificar si el identificador es en realidad una palabra reservada
+            # Resolver el tipo final del token
             tipo = automata.tipo_token
             if tipo == "IDENTIFIER" and lexema in KEYWORDS:
                 tipo = "KEYWORD"
+            elif tipo == "_SYMBOL":
+                tipo = SIMBOLOS[lexema]
 
             tokens.append(Token(tipo, lexema, linea, columna, pos))
             pos, linea, columna = _avanzar(pos, linea, columna, lexema)
