@@ -1,0 +1,595 @@
+﻿Reporte Escrito
+Analizador Léxico (Scanner) — TC3048 Diseño de Compiladores
+Escuela de Ingeniería y Ciencias  |  ITESM  |  2025
+________________
+
+
+1. Introducción
+Una vez que las características del problema han sido formuladas y enunciadas de manera clara y concisa, el siguiente paso es implementar el desarrollo del sistema de software siguiendo un modelo de proceso. Todos los modelos de proceso de desarrollo incluyen, de una u otra forma, las siguientes fases: Análisis, Diseño, Implementación, Pruebas y Despliegue. El desarrollo del scanner descrito en este reporte se basa en el estándar IEEE‑830.
+1.1 Resumen
+Este reporte documenta el ciclo de vida completo de desarrollo de un analizador léxico (scanner) para un lenguaje de programación académico simple con sintaxis similar a C/Java. El scanner lee el código fuente carácter a carácter y clasifica cada secuencia en un token — la unidad mínima con significado (palabra reservada, identificador, literal, operador, etc.). Se presentan dos implementaciones independientes: una construida con la herramienta flex y C99, y otra que utiliza Autómatas Finitos Deterministas (AFD) codificados manualmente en C#/.NET 10. El reporte abarca el análisis de los requisitos léxicos, el diseño de los AFDs y las tablas de transición, los detalles de implementación del archivo lex, y la verificación y validación mediante casos de prueba.
+1.2 Notación
+A lo largo de este documento se utiliza la siguiente notación y los siguientes modelos.
+Máquinas de Estado Finito (AFD). Un Autómata Finito Determinista es una 5-tupla M = (Q, Σ, δ, q0, F) donde:
+* Q — conjunto finito de estados
+* Σ — alfabeto de entrada (conjunto de caracteres)
+* δ: Q × Σ → Q — función de transición
+* q0 ∈ Q — estado inicial
+* F ⊆ Q — conjunto de estados de aceptación (finales)
+En las tablas de transición, el símbolo > marca el estado inicial y * marca los estados de aceptación. ERROR indica una transición inválida (el autómata rechaza la entrada en ese punto). EMIT significa que el autómata ha reconocido un token completo y lo emite, aplicando el principio de máximo consumo (longest match) antes de devolver el control.
+Expresiones Regulares. Se utiliza notación estándar: * (estrella de Kleene — cero o más), + (uno o más), ? (cero o uno), | (alternación), [ ] (clase de caracteres), [^ ] (clase negada), \. (punto literal escapado).
+Justificación del modelo. Se eligieron los AFDs como modelo de implementación porque garantizan tiempo de escaneo O(n) sin retroceso (backtracking), y son directamente realizables como tablas de transición o cadenas switch-case. Cada categoría de token tiene su propio AFD independiente; un coordinador (el Lexer) selecciona el AFD apropiado según el carácter actual y aplica máximo consumo.
+Justificación de la herramienta — flex. La herramienta flex (Fast LEXical analyzer) fue seleccionada para la implementación en C porque genera automáticamente un scanner AFD optimizado a partir de reglas de expresiones regulares escritas en un archivo de especificación .l, reduciendo significativamente el esfuerzo de implementación manual y el riesgo de errores. La implementación en C# codifica los mismos AFDs de forma manual para demostrar la teoría subyacente de manera explícita y proveer validación cruzada del diseño.
+________________
+
+
+2. Análisis
+El modelo de análisis es el puente entre la descripción a nivel de sistema y el diseño del sistema. Su enfoque principal está en el qué, no en el cómo: qué entradas y salidas manipula el sistema, qué funciones debe realizar, qué comportamientos exhibe y qué restricciones aplican. El modelo de análisis logra tres objetivos primarios: 1) describir qué requiere el usuario, 2) establecer la base para el diseño, y 3) definir un conjunto de requisitos que puedan ser validados una vez construido el sistema.
+2.1 Descripción Léxica Informal
+El lenguaje a reconocer es un lenguaje académico simple con sintaxis estilo C/Java. A continuación se describe informalmente cada categoría de token:
+* Palabras reservadas. Palabras con significado fijo que no pueden usarse como identificadores: if, else, while, for, int, float, return, void, true, false.
+* Identificadores. Una secuencia que comienza con una letra (a–z, A–Z) o guion bajo (_), seguida de cero o más letras, dígitos (0–9) o guiones bajos. El lenguaje distingue mayúsculas de minúsculas (Precio y precio son identificadores distintos).
+* Literales enteros. Uno o más dígitos decimales (0–9) sin punto decimal.
+* Literales flotantes. Uno o más dígitos decimales, seguidos de un punto literal (.), seguidos de uno o más dígitos decimales. El punto debe estar rodeado de dígitos en ambos lados.
+* Operadores aritméticos. Los cuatro operadores básicos: +, -, *, /.
+* Operadores relacionales. Operadores de comparación: ==, !=, <, >, <=, >=. Las formas compuestas (==, !=, <=, >=) tienen prioridad sobre las simples mediante máximo consumo.
+* Operadores de asignación. Asignación simple = y formas compuestas +=, -=, *=, /=. Las formas compuestas tienen prioridad.
+* Símbolos especiales. Delimitadores y puntuación: (, ), {, }, ,, ;, ..
+* Comentarios de línea. Comienzan con // y se extienden hasta el final de la línea. La secuencia completa (incluyendo el prefijo //) es un único token y no se interpreta más.
+* Espacios en blanco. Espacios, tabulaciones y retornos de carro se consumen silenciosamente; separan tokens pero no generan ninguno.
+* Errores léxicos. Cualquier carácter no reconocido por las reglas anteriores es un símbolo inválido. Se reporta como error y se descarta (recuperación en modo pánico); el escaneo continúa con el siguiente carácter.
+2.2 Especificación Formal — Expresiones Regulares
+La siguiente tabla presenta la expresión regular formal para cada tipo de token, junto con su Token ID numérico. El orden de las reglas es crítico: cuando dos patrones pueden coincidir con la misma entrada, gana el que aparece primero. Las dos restricciones de orden más importantes son:
+* FLOAT antes que INT: Sin este orden, la entrada 3.14 se tokenizaría como ENTERO(3) + PUNTO(.) + ENTERO(14) — incorrecto. Colocar el patrón FLOAT primero obliga al máximo consumo a consumir el 3.14 completo.
+* Palabras reservadas antes que IDENTIFIER: Sin este orden, if sería clasificado como IDENTIFIER, ya que satisface el patrón de identificador. Listar primero las palabras clave garantiza que nunca sean mal clasificadas.
+Nombre del Token
+	Token ID
+	Expresión Regular
+	Notas
+	KEYWORD
+	100–109
+	if|else|while|for|int|float|return|void|true|false
+	Debe preceder a IDENTIFIER
+	IDENTIFIER
+	200
+	[a-zA-Z_][a-zA-Z0-9_]*
+	Cualquier coincidencia no-keyword
+	FLOAT_LIT
+	202
+	[0-9]+\.[0-9]+
+	Debe preceder a INT_LIT
+	INT_LIT
+	201
+	[0-9]+
+	Uno o más dígitos
+	OP_PASSIGN
+	321
+	\+=
+	Compuesto — antes que OP_PLUS
+	OP_MASSIGN
+	322
+	-=
+	Compuesto
+	OP_STASSIGN
+	323
+	\*=
+	Compuesto
+	OP_DASSIGN
+	324
+	/=
+	Compuesto
+	OP_EQ
+	310
+	==
+	Relacional — antes que OP_ASSIGN
+	OP_NEQ
+	311
+	!=
+	Relacional
+	OP_LEQ
+	314
+	<=
+	Relacional — antes que OP_LT
+	OP_GEQ
+	315
+	>=
+	Relacional — antes que OP_GT
+	OP_PLUS
+	300
+	\+
+	Aritmético
+	OP_MINUS
+	301
+	-
+	Aritmético
+	OP_MULT
+	302
+	\*
+	Aritmético
+	OP_DIV
+	303
+	/
+	Aritmético
+	OP_LT
+	312
+	< 
+	Relacional
+	OP_GT
+	313
+	> 
+	Relacional
+	OP_ASSIGN
+	320
+	=
+	Asignación simple
+	SYM_LPAREN
+	400
+	\(
+	Símbolo especial
+	SYM_RPAREN
+	401
+	\)
+	Símbolo especial
+	SYM_LBRACE
+	402
+	\{
+	Símbolo especial
+	SYM_RBRACE
+	403
+	\}
+	Símbolo especial
+	SYM_COMMA
+	404
+	,
+	Símbolo especial
+	SYM_SEMI
+	405
+	;
+	Símbolo especial
+	SYM_DOT
+	406
+	\.
+	Símbolo especial
+	COMMENT
+	500
+	\/\/[^\n]*
+	Comentario de línea completo
+	LEX_ERROR
+	999
+	.
+	Último recurso — carácter no reconocido
+	________________
+
+
+3. Diseño
+El diseño traduce la especificación del análisis (el qué) en un plano (el cómo). El modelo de diseño presentado aquí consiste en un AFD preciso para cada categoría de token, sus tablas de transición, la asignación completa de Token IDs y la estructura de datos utilizada para la tabla de símbolos. La implementación debe ser completamente trazable a cada elemento de esta sección.
+3.1 AFD para IDENTIFIER / KEYWORD
+Un identificador comienza con una letra o guion bajo y es seguido por cualquier combinación de letras, dígitos y guiones bajos. Después de que el AFD emite el lexema, se realiza una verificación post-emisión de palabras clave: si el lexema pertenece al conjunto de palabras reservadas, el tipo de token se reemplaza por la constante KEYWORD correspondiente.
+Estado
+	letra / _
+	dígito
+	otro
+	Acción
+	q0 >
+	→ q1
+	ERROR
+	ERROR
+	estado inicial
+	[q1 *]
+	→ q1
+	→ q1
+	EMIT
+	acumular caracteres
+	3.2 AFD para Literal ENTERO
+Un literal entero es uno o más dígitos decimales consecutivos. Lo reconoce un AFD de dos estados que itera sobre dígitos y emite al encontrar cualquier otro carácter.
+Estado
+	dígito
+	otro
+	Acción
+	q0 >
+	→ q1
+	ERROR
+	estado inicial
+	[q1 *]
+	→ q1
+	EMIT
+	acumular dígitos
+	3.3 AFD para Literal FLOTANTE
+Un literal flotante requiere una parte entera, un punto decimal obligatorio y una parte decimal, todas no vacías. El AFD usa cuatro estados: entra al estado de aceptación solo después de que al menos un dígito sigue al punto. Si el punto está ausente o no hay dígitos después de él, el AFD señala FAIL (no es flotante) y el Lexer intenta con el AFD de ENTERO.
+Estado
+	dígito
+	punto ( . )
+	otro
+	Acción
+	q0 >
+	→ q1
+	ERROR
+	ERROR
+	estado inicial
+	q1
+	→ q1
+	→ q2
+	FAIL
+	parte entera
+	q2
+	→ q3
+	ERROR
+	FAIL
+	tras el punto
+	[q3 *]
+	→ q3
+	EMIT
+	EMIT
+	parte decimal
+	3.4 AFD para Operadores Relacionales y de Asignación
+Los operadores relacionales y de asignación comparten el mismo AFD porque todos comienzan con uno de los caracteres < > = !. El AFD usa lookahead para determinar si aplica una forma compuesta (<=, >=, ==, !=) o una simple. Todos los estados excepto q7 son de aceptación, ya que un solo carácter ya es un operador válido.
+Estado
+	< 
+	> 
+	=
+	!
+	otro
+	Acción
+	q0 >
+	→q1*
+	→q3*
+	→q5*
+	→q7
+	ERROR
+	estado inicial
+	[q1 *]
+	EMIT
+	EMIT
+	→q2*
+	EMIT
+	EMIT
+	vio <
+	[q2 *]
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	vio <=
+	[q3 *]
+	EMIT
+	EMIT
+	→q4*
+	EMIT
+	EMIT
+	vio >
+	[q4 *]
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	vio >=
+	[q5 *]
+	EMIT
+	EMIT
+	→q6*
+	EMIT
+	EMIT
+	vio =
+	[q6 *]
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	vio ==
+	q7
+	ERROR
+	ERROR
+	→q8*
+	ERROR
+	ERROR
+	vio !
+	[q8 *]
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	EMIT
+	vio !=
+	3.5 AFD para Comentario de Línea
+Un comentario de línea comienza exactamente con dos barras diagonales // y se extiende hasta, pero sin incluir, el carácter de nueva línea. La secuencia completa se emite como un único token COMMENT.
+Estado
+	/
+	\n
+	otro
+	Acción
+	q0 >
+	→ q1
+	ERROR
+	ERROR
+	estado inicial
+	q1
+	→ q2
+	ERROR
+	ERROR
+	primer /
+	[q2 *]
+	→ q3
+	EMIT
+	→ q3
+	vio //
+	[q3 *]
+	→ q3
+	EMIT
+	→ q3
+	dentro del comentario
+	3.6 Tabla de Token IDs
+Los Token IDs son constantes numéricas definidas en token_ids.h. Se agrupan por categoría para facilitar la lectura y se utilizan de forma uniforme en ambas implementaciones.
+Categoría
+	Constante
+	ID
+	Palabras reservadas
+	TK_IF
+	100
+	TK_ELSE
+	101
+	TK_WHILE
+	102
+	TK_FOR
+	103
+	TK_INT
+	104
+	TK_FLOAT
+	105
+	TK_RETURN
+	106
+	TK_VOID
+	107
+	TK_TRUE
+	108
+	TK_FALSE
+	109
+	Literales
+	TK_ID
+	200
+	TK_INT_LIT
+	201
+	TK_FLT_LIT
+	202
+	Operadores
+	TK_PLUS
+	300
+	TK_MINUS
+	301
+	TK_MULT
+	302
+	TK_DIV
+	303
+	TK_EQ
+	310
+	TK_NEQ
+	311
+	TK_LT
+	312
+	TK_GT
+	313
+	TK_LEQ
+	314
+	TK_GEQ
+	315
+	Asignación
+	TK_ASSIGN
+	320
+	TK_PASSIGN
+	321
+	TK_MASSIGN
+	322
+	TK_STASSIGN
+	323
+	TK_DASSIGN
+	324
+	Símbolos
+	TK_LPAREN
+	400
+	TK_RPAREN
+	401
+	TK_LBRACE
+	402
+	TK_RBRACE
+	403
+	TK_COMMA
+	404
+	TK_SEMI
+	405
+	TK_DOT
+	406
+	Comentario
+	TK_COMMENT
+	500
+	3.7 Diseño de la Tabla de Símbolos
+La tabla de símbolos registra cada identificador y literal numérico encontrado durante el escaneo. Su propósito es proveer al parser y a las fases posteriores del compilador con un registro único y sin duplicados de los símbolos del programa. No almacena palabras reservadas, operadores ni puntuación.
+Cada entrada en la tabla contiene cuatro campos: un índice secuencial, la cadena del lexema (texto exacto del código fuente), el tipo de token (ID, INTEGER o FLOAT) y el número de línea de la primera aparición. La implementación usa un arreglo de tamaño fijo de hasta 512 entradas con deduplicación por búsqueda lineal: antes de insertar, se recorre el arreglo para verificar si el lexema ya existe; si es así, no se crea una nueva entrada.
+Pseudocódigo de la función de inserción:
+ 
+función sym_insert(lexema, tipo, linea):
+        para i en 0 .. contador - 1:
+            si tabla[i].lexema == lexema:
+                retornar              // ya existe — no duplicar
+        tabla[contador].lexema = lexema
+        tabla[contador].tipo   = tipo
+        tabla[contador].linea  = linea
+        contador++
+________________
+
+
+4. Implementación
+La implementación se deriva directamente del diseño. La implementación en C utiliza la herramienta flex, que genera un scanner en C a partir del archivo de especificación scanner.l. Un archivo .l se divide en tres secciones separadas por marcadores %%: la Sección de Definiciones, la Sección de Reglas y la Sección de Código de Usuario.
+4.1 Sección de Definiciones (scanner.l, líneas 1–78)
+La sección de definiciones prepara todo lo que las reglas necesitarán:
+* Prólogo C (bloque %{ %}). Contiene directivas #include para stdio.h, string.h y symbol_table.h (que incluye transitivamente token_ids.h). También declara los prototipos de emit() y lex_error().
+* Opciones de flex.
+   * %option noyywrap — indica a flex que no se necesita la función yywrap() al llegar al EOF. Requerido al compilar sin -lfl.
+   * %option yylineno — instruye a flex para que mantenga automáticamente la variable global yylineno, incrementándola en cada nueva línea.
+* Macros con nombre. Los fragmentos de expresiones regulares se definen como macros con nombre para mejorar la legibilidad. Se referencian en la Sección de Reglas con la sintaxis {NOMBRE}:
+·            
+·           LETTER   [a-zA-Z_]
+·           DIGIT        [0-9]
+·           ID           {LETTER}({LETTER}|{DIGIT})*
+·           INT          {DIGIT}+
+·           FLOAT        {DIGIT}+\.{DIGIT}+
+·           COMMENT  \/\/[^\n]*
+BLANK        [ \t\r]+
+Nota importante: flex no permite comentarios /* */ en línea en las líneas de %option ni en las definiciones de macros — los trata como parte de la cadena de opción/definición y causa errores de análisis. El archivo original contenía dichos comentarios y requirió corrección antes de que la compilación pudiera realizarse con éxito.
+4.2 Sección de Reglas (scanner.l, líneas 80–172)
+La sección de reglas (entre los dos marcadores %%) contiene pares patrón–acción. Flex lee cada patrón como una expresión regular; cuando se encuentra una coincidencia, se ejecuta la acción C asociada. El orden de las reglas es crítico, ya que flex resuelve empates en longitud de coincidencia seleccionando la primera regla que coincide:
+1. Palabras reservadas primero — evita que if, while, etc. sean clasificados como IDENTIFIER.
+2. FLOAT antes que INT — máximo consumo: 3.14 debe consumirse como un único token, no dividirse en 3, ., 14.
+3. Operadores compuestos antes que simples — += debe reconocerse antes de que + y = sean reconocidos por separado.
+4. Nueva línea (\n) consumida silenciosamente — yylineno ya fue incrementado por flex; no se emite ningún token.
+5. Espacios en blanco (BLANK) consumidos silenciosamente — espacios y tabulaciones son separadores de tokens, no tokens en sí.
+6. Punto (.) como última regla — el punto de flex coincide con cualquier carácter excepto nueva línea; colocado al final, actúa como captura general para errores léxicos.
+Cada regla de palabra reservada y operador llama a emit(token_id, nombre, yytext). Las reglas de identificadores y literales además llaman a sym_insert(yytext, tipo, yylineno) para registrar el símbolo.
+4.3 Sección de Código de Usuario (scanner.l, líneas 175–199)
+La sección de código de usuario (después del segundo %%) define las dos funciones auxiliares utilizadas en las reglas:
+* emit(int id, const char* nombre, const char* lexema) — imprime una fila de la tabla de tokens en stdout usando printf con especificadores de formato de ancho fijo para el Token ID, el nombre descriptivo, el texto del lexema y el número de línea actual (yylineno).
+* lex_error(const char* mal_caracter) — imprime un mensaje de error en stderr indicando el número de línea y el carácter no reconocido. La estrategia de recuperación es modo pánico: el carácter problemático se descarta silenciosamente y el scanner continúa con el siguiente carácter de entrada, asegurando que un único símbolo incorrecto no aborte el escaneo completo.
+________________
+
+
+5. Verificación y Validación
+La verificación pregunta "¿estamos construyendo el producto correctamente?" — confirma que la implementación se ajusta a su especificación. La validación pregunta "¿estamos construyendo el producto correcto?" — confirma que el sistema cumple con las expectativas del usuario. Los siguientes casos de prueba abordan ambas.
+5.1 Caso de Prueba 1 — Programa Válido (test_valid.sl)
+Descripción. Un programa completo con dos funciones auxiliares (suma, promedio), una función de clasificación (clasificar) y una función main. Ejercita operaciones aritméticas, operadores relacionales, ciclos while y for, estructuras if/else y operadores de asignación compuesta.
+Resultado esperado. Todos los tokens clasificados correctamente; cero errores léxicos; tabla de símbolos poblada con todos los identificadores y literales numéricos.
+Salida real (primeros 15 tokens):
+ID
+	Nombre
+	Lexema
+	Línea
+	500
+	COMMENT
+	// test_valid.sl — ...
+	1
+	104
+	KW_INT
+	int
+	4
+	200
+	IDENTIFIER
+	suma
+	4
+	400
+	SYM_LPAREN
+	(
+	4
+	104
+	KW_INT
+	int
+	4
+	200
+	IDENTIFIER
+	a
+	4
+	404
+	SYM_COMMA
+	,
+	4
+	104
+	KW_INT
+	int
+	4
+	200
+	IDENTIFIER
+	b
+	4
+	401
+	SYM_RPAREN
+	)
+	4
+	402
+	SYM_LBRACE
+	{
+	4
+	106
+	KW_RETURN
+	return
+	5
+	200
+	IDENTIFIER
+	a
+	5
+	300
+	OP_PLUS
+	+
+	5
+	200
+	IDENTIFIER
+	b
+	5
+	Resultado: APROBADO — 0 errores, la tabla de símbolos contiene 22 entradas incluyendo suma, promedio, clasificar, main, resultado, 3.14, 2.0 y todos los demás identificadores y literales.
+5.2 Caso de Prueba 2 — Detección de Errores (test_errors.sl)
+Descripción. Un programa con cuatro caracteres intencionalmente inválidos: $ (línea 9), @ (línea 12), ~ (línea 15) y ` (línea 18). Todos los demás tokens del archivo son válidos.
+Resultado esperado. Cuatro errores léxicos reportados en stderr; los tokens válidos alrededor de los errores son reconocidos correctamente; el escaneo no se aborta.
+Salida real en stderr:
+ 
+[ERROR LEXICO] linea 9:  simbolo no reconocido '$'
+[ERROR LEXICO] linea 12: simbolo no reconocido '@'
+[ERROR LEXICO] linea 15: simbolo no reconocido '~'
+[ERROR LEXICO] linea 18: simbolo no reconocido '`'
+Resultado: APROBADO — 4 errores detectados en las líneas correctas, la recuperación en modo pánico funciona correctamente, se producen 11 entradas válidas en la tabla de símbolos.
+5.3 Caso de Prueba 3 — Entrada de Referencia
+Entrada: int precio = 3.14; if (precio >= 0.0) // ok
+Secuencia de tokens esperada:
+#
+	Nombre del Token
+	Lexema
+	1
+	KW_INT
+	int
+	2
+	IDENTIFIER
+	precio
+	3
+	OP_ASSIGN
+	=
+	4
+	FLOAT_LIT
+	3.14
+	5
+	SYM_SEMI
+	;
+	6
+	KW_IF
+	if
+	7
+	SYM_LPAREN
+	(
+	8
+	IDENTIFIER
+	precio
+	9
+	OP_GEQ
+	>=
+	10
+	FLOAT_LIT
+	0.0
+	11
+	SYM_RPAREN
+	)
+	12
+	COMMENT
+	// ok
+	Resultado: APROBADO — ambas implementaciones producen exactamente esta secuencia de tokens. Tabla de símbolos: precio (ID), 3.14 (FLOAT), 0.0 (FLOAT).
+5.4 Validación Cruzada de AFDs en C#
+La implementación en C# valida cada token emitido contra su expresión regular .NET equivalente usando Regex.IsMatch() inmediatamente después de que el AFD lo acepta. Para la entrada de referencia anterior, los 9 tokens distintos de espacios en blanco retornaron True. Esto confirma que los AFDs codificados manualmente son consistentes con las especificaciones de expresiones regulares formales definidas en la sección de Análisis.
+5.5 Suite de Pruebas Unitarias
+El proyecto en C# incluye una suite de 42 pruebas unitarias xUnit en LexerProject.Tests, cubriendo: reconocimiento de las 10 palabras reservadas, casos límite de identificadores (guion bajo inicial, mayúsculas mezcladas, dígitos después del primer carácter), formatos de literales enteros y flotantes, todos los operadores relacionales y de asignación compuesta, los siete símbolos especiales, comportamiento de comentarios de línea y generación de tokens de error. Las 42 pruebas pasan sobre el runtime .NET 10.
+ 
+Correctas! — Con error: 0, Superado: 42, Omitido: 0, Total: 42
+Duración: 18 ms — LexerProject.Tests.dll (net10.0)
+________________
+
+
+6. Referencias
+1.          [1]   A. V. Aho, M. S. Lam, R. Sethi y J. D. Ullman, Compilers: Principles, Techniques, and Tools, 2da ed. Boston, MA: Addison-Wesley, 2007.
+2.          [2]   R. Castelló, Clase magistral, Tema: "Capítulo 2 – Análisis Léxico." TC3048, Escuela de Ingeniería y Ciencias, ITESM, Chihuahua, Chih., 2024.
+3.          [3]   The flex Project, flex: The Fast Lexical Analyzer [Software], versión 2.6.4. Disponible en: https://github.com/westes/flex. 
+4.          [4]   Microsoft, Documentación de .NET, 2024. [En línea]. Disponible en: https://learn.microsoft.com/es-es/dotnet/ 
+5.          [5]   IEEE, "IEEE Standard for Software Requirements Specifications," IEEE Std 830-1998, pp. 1–37, 1998.
